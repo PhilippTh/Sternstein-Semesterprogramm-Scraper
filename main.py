@@ -136,13 +136,20 @@ for item in items:
 
 for item in processed:
     date = item["start_datetime"]
-    two_days = re.compile("(\d*)./(\d*).(\d*).")
-    one_day = re.compile("(\d*).(\d*).")
+    two_days = re.compile("(\d*)./(\d*).(\d*)")
+    more_days = re.compile("(\d*).-(\d*).(\d*)")
+    one_day = re.compile("(\d*).(\d*)")
     time = re.compile("(\d*:\d*)")
     d, d_end, m, t, t_end = None, None, None, None, None
     
     if two_days.match(date):
         day = two_days.match(date)
+        d = day.group(1)
+        d_end =day.group(2)
+        m = day.group(3)
+
+    elif more_days.match(date):
+        day = more_days.match(date)
         d = day.group(1)
         d_end =day.group(2)
         m = day.group(3)
