@@ -101,10 +101,10 @@ values = []
 
 today = datetime.date.today()
 if "Dezember" in div.text:
-    if today.month in range(8, 12):
+    if today.month in range(8, 13):
         next_year = today.year + 1
         this_year = today.year
-    elif today.month in range(1, 7):
+    elif today.month in range(1, 8):
         next_year = today.year
         this_year = today.year - 1
 else:
@@ -136,19 +136,12 @@ for item in items:
 
 for item in processed:
     date = item["start_datetime"]
-    two_days = re.compile("(\d*)./(\d*).(\d*)")
-    more_days = re.compile("(\d*).-(\d*).(\d*)")
-    one_day = re.compile("(\d*).(\d*)")
-    time = re.compile("(\d*:\d*)")
+    more_days = re.compile(r"(\d{1,2}).[/-](\d{1,2}).(\d{1,2})")
+    one_day = re.compile(r"(\d{1,2).(\d{1,2})")
+    time = re.compile(r"(\d{1,2}:\d{1,2})")
     d, d_end, m, t, t_end = None, None, None, None, None
     
-    if two_days.match(date):
-        day = two_days.match(date)
-        d = day.group(1)
-        d_end =day.group(2)
-        m = day.group(3)
-
-    elif more_days.match(date):
+    if more_days.match(date):
         day = more_days.match(date)
         d = day.group(1)
         d_end =day.group(2)
