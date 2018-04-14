@@ -1,8 +1,9 @@
 from __future__ import print_function
 import httplib2
 import os
+import logging
+import traceback
 import datetime
-from datetime import timedelta
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -16,8 +17,14 @@ try:
 except ImportError:
     flags = None
 
-# If modifying these scopes, delete your previously saved credentials
-# at ~/.credentials/calendar-python-quickstart.json
+logging.basicConfig(filename='logfile', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.debug('Start of the program'.center(50, '='))
+
+if not os.path.isfile('client_secret.json'):
+    logging.error('Could not find client_secret.json file!')
+    raise Exception ('You have no clien_secret.json file stored. Please follow this tutorial to get your file: https://developers.google.com/google-apps/calendar/quickstart/python')
+
+# If modifying these scopes, delete your previously saved credentials at ~/.credentials/calendar-python-quickstart.json
 SCOPES = 'https://www.googleapis.com/auth/calendar'
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Sternstein Python Scraper'
@@ -31,9 +38,7 @@ def get_credentials():
     credential_dir = os.path.join(home_dir, '.credentials')
     if not os.path.exists(credential_dir):
         os.makedirs(credential_dir)
-    credential_path = os.path.join(credential_dir,
-                                   'calendar-python-quickstart.json')
-
+    credential_path = os.path.join(credential_dir, 'calendar-python-quickstart.json')
     store = Storage(credential_path)
     credentials = store.get()
     if not credentials or credentials.invalid:
@@ -71,11 +76,13 @@ def main():
     print ('Event created: %s' % (event.get('htmlLink')))
 
 response = requests.get("http://www.sternstein.net/semesterprogramm.html")
+response.raise_for_status()
 soup = BeautifulSoup(response.content, "html.parser")
+logging.debug('Parsed the html code to BeautifulSoup')
 div = soup.find("div", attrs={"class": "content clearfix"})
+logging.debug('Extracted the relevant html element')
 
-date, title, values = None, None, []
-items = []
+date, title, values, items = None, None, [], []
 
 def appending (d, v):
     items.append({
@@ -90,26 +97,32 @@ for elem in div.contents:
             appending(date, values)
             values = []
         date = elem.text
-    elif elem.name == "h3" and elem.text == "\xa0":
+    elif elem.name == "h3" and elem.text == "\xa0" or elem.name == "h2" and elem.text == "\xa0" or elem.name == "p":
         values.append(elem.text)
-    elif elem.name == "h2" and elem.text == "\xa0":
-        values.append(elem.text)
-    elif elem.name == "p":
-        values.append(elem.text)
-appending(date, values)
+
+appending(date, values) #needed, so the last date and value pair from the list get assigned to items
 values = []
+
+logging.debug('Found the following dates:'.center(50, '='))
+for item in items:
+    logging.debug(item)
 
 today = datetime.date.today()
 if "Dezember" in div.text:
     if today.month in range(8, 13):
         next_year = today.year + 1
         this_year = today.year
+        logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
     elif today.month in range(1, 8):
         next_year = today.year
         this_year = today.year - 1
+        logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
+
 else:
     next_year = today.year + 1
     this_year = today.year
+    logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
+
 
 def list_splitter(values, delim):
     items = []
@@ -134,10 +147,15 @@ for item in items:
             "notes": details[1:]
         })
 
+logging.debug('These are the processed events:'.center(50, '='))
+for process in processed:
+    logging.debug(process)
+
+logging.debug('These are the finished events:'.center(50, '='))
 for item in processed:
     date = item["start_datetime"]
     more_days = re.compile(r"(\d{1,2}).[/-](\d{1,2}).(\d{1,2})")
-    one_day = re.compile(r"(\d{1,2).(\d{1,2})")
+    one_day = re.compile(r"(\d{1,2}).(\d{1,2})")
     time = re.compile(r"(\d{1,2}:\d{1,2})")
     d, d_end, m, t, t_end = None, None, None, None, None
     
@@ -152,6 +170,7 @@ for item in processed:
         d = day.group(1)
         d_end = d
         m = day.group(2)
+
 
     for value in item["notes"]:
         if time.match(value) and not t:
@@ -188,8 +207,11 @@ for item in processed:
                 item["end_datetime"] = str(next_year) + "-" + m + "-" + str(d_end) + "T" + "00:00:00"
         else:
             item["start_datetime"] = str(this_year) + "-" + m + "-" + d + "T" + "00:00:00"
-            item["end_datetime"] = str(this_year) + "-" + m + "-" + str(d_end) + "T" + "00:00:00"        
+            item["end_datetime"] = str(this_year) + "-" + m + "-" + str(d_end) + "T" + "00:00:00"  
+    logging.debug(item)      
 
+logging.debug('Added the following items to your calendar to your calendar:'.center(50, '='))
 for item in processed:
-    print(item)
-main()
+    main()
+    logging.debug(item)
+logging.debug('End of the program'.center(50, '=')+'\n')
