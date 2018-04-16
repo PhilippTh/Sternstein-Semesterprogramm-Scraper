@@ -2,7 +2,6 @@ from __future__ import print_function
 import httplib2
 import os
 import logging
-import traceback
 import datetime
 import requests
 import re
@@ -17,8 +16,12 @@ try:
 except ImportError:
     flags = None
 
-logging.basicConfig(filename='logfile', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='logfile.txt', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.debug('Start of the program'.center(50, '='))
+
+'''
+====================Google-API====================
+'''
 
 if not os.path.isfile('client_secret.json'):
     logging.error('Could not find client_secret.json file!')
@@ -75,6 +78,10 @@ def main():
     event = service.events().insert(calendarId='7rt3vc5jrsqi7sml9v97ljrneg@group.calendar.google.com', body=event).execute()
     print ('Event created: %s' % (event.get('htmlLink')))
 
+'''
+===================Web-Scraper====================
+'''
+
 response = requests.get("http://www.sternstein.net/semesterprogramm.html")
 response.raise_for_status()
 soup = BeautifulSoup(response.content, "html.parser")
@@ -92,15 +99,15 @@ def appending (d, v):
             })
 
 for elem in div.contents:
-    if elem.name == "h3" and elem.text != "\xa0":
+    if elem.name == "h3" and elem.text != "\xa0": #selects every date
         if values:
-            appending(date, values)
-            values = []
-        date = elem.text
+            appending(date, values) #appends the date that it found before and the values it found in the meantime
+            values = []  #deletes the old values
+        date = elem.text #assigns the new date
     elif elem.name == "h3" and elem.text == "\xa0" or elem.name == "h2" and elem.text == "\xa0" or elem.name == "p":
         values.append(elem.text)
 
-appending(date, values) #needed, so the last date and value pair from the list get assigned to items
+appending(date, values) #needed, so the last date and value pair from the div.contents get assigned to items, since appending is only called when the next date is found
 values = []
 
 logging.debug('Found the following dates:'.center(50, '='))
@@ -112,39 +119,39 @@ if "Dezember" in div.text:
     if today.month in range(8, 13):
         next_year = today.year + 1
         this_year = today.year
-        logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
+        logging.debug('The events start in  %s and continue in  %s.' % (str(this_year), str(next_year)))
     elif today.month in range(1, 8):
         next_year = today.year
         this_year = today.year - 1
-        logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
+        logging.debug('The events start in  %s and continue in  %s.' % (str(this_year), str(next_year)))
 
 else:
     next_year = today.year + 1
     this_year = today.year
-    logging.debug('The current year is %s, the next year will be %s.' % (str(this_year), str(next_year)))
+    logging.debug('All the events happen in %s.' % (str(this_year),))
 
 
-def list_splitter(values, delim):
-    items = []
+def list_splitter(values, delim): #stores all items until "\xa0" is reached in a list 
+    output = []
     item = []
     for value in values:
-        if value == delim:
+        if value == delim: 
             if item:
-                items.append(item)
+                output.append(item)
             item = []
         else:
             item.append(value)
-    return items
+    return output
 
 processed = []
 
-for item in items:
-    for details in list_splitter(item["values"], "\xa0"):
+for date in items: 
+    for event in list_splitter(date["values"], "\xa0"): #selects every list form list_splitter to the corresponding date
         processed.append({
-            "start_datetime": item["date"],
+            "start_datetime": date["date"],
             "end_datetime": None,
-            "title": details[0],
-            "notes": details[1:]
+            "title": event[0],
+            "notes": event[1:]
         })
 
 logging.debug('These are the processed events:'.center(50, '='))
@@ -159,34 +166,34 @@ for item in processed:
     time = re.compile(r"(\d{1,2}:\d{1,2})")
     d, d_end, m, t, t_end = None, None, None, None, None
     
-    if more_days.match(date):
-        day = more_days.match(date)
+    if more_days.search(date):
+        day = more_days.search(date)
         d = day.group(1)
         d_end =day.group(2)
         m = day.group(3)
 
-    elif one_day.match(date):
-        day = one_day.match(date)
+    elif one_day.search(date):
+        day = one_day.search(date)
         d = day.group(1)
         d_end = d
         m = day.group(2)
 
 
     for value in item["notes"]:
-        if time.match(value) and not t:
-            found_time = time.match(value)
+        if time.search(value) and not t: #finds the first mention of a time, which is always the starting time
+            found_time = time.search(value)
             t = found_time.group(1) + ":00"
             control = "23:00:00"
-            t_converted = datetime.datetime.strptime(t, '%H:%M:%S')+ datetime.timedelta(hours = 1)
-            c_converted = datetime.datetime.strptime(control, '%H:%M:%S')
-            if t_converted >= c_converted:
+            t_converted = datetime.datetime.strptime(t, '%H:%M:%S') #this is the formatted starting time
+            c_converted = datetime.datetime.strptime(control, '%H:%M:%S') #this is 23:00, formatted
+            if t_converted >= c_converted: #if the start time happens to be 23:00 or later, the end time is set to 1 second before midnight, so I don't have to deal with different dates for start and endtime
                 t_end = "23:59:59"
             else:
-                t_end = t_converted.strftime('%H:%M:%S')
-        item["notes"]= [" ".join(item["notes"][0:])]
+                t_end = (t_converted + datetime.timedelta(hours = 1)).strftime('%H:%M:%S') #if the start time is before 23:00 the end time is set 1 hour later
+        item["notes"]= [" ".join(item["notes"])]
                
-    if t:
-        if "Dezember" in div.text:
+    if t: #if a starting time is found, it will create a string with this time that google can understand
+        if "Dezember" in div.text: #assigns the correct year to the event
             if m == "9" or m == "10" or m == "11" or m == "12":
                 item["start_datetime"] = str(this_year) + "-" + m + "-" + d + "T" + t
                 item["end_datetime"] = str(this_year) + "-" + m + "-" + d_end + "T" + t_end
@@ -196,7 +203,7 @@ for item in processed:
         else:
             item["start_datetime"] = str(this_year) + "-" + m + "-" + d + "T" + t
             item["end_datetime"] = str(this_year) + "-" + m + "-" + d_end + "T" + t_end
-    else:
+    else: #if no time is found, it is created as a whole-day-event
         d_end = int(d_end) + 1
         if "Dezember" in div.text:
             if m == "9" or m == "10" or m == "11" or m == "12":
@@ -210,7 +217,7 @@ for item in processed:
             item["end_datetime"] = str(this_year) + "-" + m + "-" + str(d_end) + "T" + "00:00:00"  
     logging.debug(item)      
 
-logging.debug('Added the following items to your calendar to your calendar:'.center(50, '='))
+logging.debug('Added the following items to your calendar:'.center(50, '='))
 for item in processed:
     main()
     logging.debug(item)
